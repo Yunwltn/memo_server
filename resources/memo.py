@@ -119,6 +119,10 @@ class MemoResource(Resource) :
 
     @jwt_required()
     def put(self, memo_id) :
+        # {"title" : "제목",
+        # "datetime" : "2023-01-22",
+        # "content" : "내용"}
+
         data = request.get_json()
         user_id = get_jwt_identity()
 
@@ -150,3 +154,48 @@ class MemoResource(Resource) :
             return {"result" : "fail", "error" : str(e)}, 500
 
         return {"result" : "success"}, 200
+
+class FollowMemoListResource(Resource) :
+    @jwt_required()
+    def get(self) :
+        user_id = get_jwt_identity()
+
+        offset = request.args.get('offset')
+        limit = request.args.get('limit')
+
+        try :
+            connection = get_connection()
+
+            query = '''select u.nickname, m.title, m.datetime, m.content, m.createdAt, f.followeeId, m.id as memoId
+                    from follow as f
+                    join user as u on f.followerId = u.id
+                    join memo as m on m.userId = f.followeeId
+                    where f.followerId = %s
+                    order by m.datetime desc
+                    limit ''' + offset + ''' , ''' + limit + ''' ; '''
+
+            record = ( user_id, )
+
+            cursor = connection.cursor(dictionary= True)
+
+            cursor.execute(query, record)
+
+            result_list = cursor.fetchall()
+
+            i = 0
+            for row in result_list :
+                result_list[i]['datetime'] = row['datetime'].isoformat()
+                result_list[i]['createdAt'] = row['createdAt'].isoformat()
+                i = i + 1
+
+            cursor.close()
+            connection.close()
+
+        except Error as e :
+            print(e)
+            cursor.close()
+            connection.close()
+
+            return {"result" : "fail", "error" : str(e)}, 500
+
+        return {"result" : "success", "items" : result_list, "count" : len(result_list)}, 200
